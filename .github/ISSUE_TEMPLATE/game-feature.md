@@ -10,10 +10,21 @@ assignees: ''
 Brief description of the feature.
 
 ## Game
-Which game this feature belongs to.
+<!-- Select the game this feature belongs to -->
+- [ ] Tech Trek Challenge
+- [ ] PC Builder Workshop
+- [ ] IT Emergency Room
+- [ ] Network Defense
+- [ ] Command Line Conquest
+- [ ] Tech Term Titan
+- [ ] Support Desk Simulator
+- [ ] Security Response Team
+- [ ] Mobile Device Master
+- [ ] Tech Time Machine
 
-## Educational Objectives
-What CompTIA A+ objectives this feature covers.
+## CompTIA A+ Objectives
+<!-- List the CompTIA A+ objectives this feature addresses -->
+- 
 
 ## Acceptance Criteria
 - [ ] Criterion 1
@@ -25,3 +36,6 @@ Any technical details or implementation notes.
 
 ## Design References
 Links to design mockups or references.
+
+## Estimate
+Estimated effort in days:
