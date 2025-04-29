@@ -1,0 +1,98 @@
+name: Weekly Status Report
+
+on:
+  schedule:
+    - cron: '0 9 * * MON'  # 9 AM every Monday
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Generate Status Report
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            // Get current date info
+            const today = new Date();
+            const weekNumber = Math.ceil((today - new Date(today.getFullYear(), 0, 1)) / 604800000);
+            const reportDate = today.toISOString().split('T')[0];
+            
+            // Fetch milestone data
+            const milestones = await github.rest.issues.listMilestones({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            
+            // Fetch recently closed issues
+            const closedIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              since: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+            });
+            
+            // Fetch in-progress issues
+            const openIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            
+            // Generate report content
+            let reportContent = `# Weekly Status Report - Week ${weekNumber}\n\n`;
+            reportContent += `*Generated on: ${reportDate}*\n\n`;
+            
+            // Milestone Progress
+            reportContent += `## Milestone Progress\n\n`;
+            for (const milestone of milestones.data) {
+              const progress = milestone.closed_issues / (milestone.closed_issues + milestone.open_issues) * 100;
+              reportContent += `- **${milestone.title}**: ${progress.toFixed(1)}% complete (${milestone.closed_issues}/${milestone.closed_issues + milestone.open_issues} issues)\n`;
+            }
+            
+            // Recently Completed
+            reportContent += `\n## Recently Completed\n\n`;
+            for (const issue of closedIssues.data) {
+              if (!issue.pull_request) { // Exclude PRs
+                reportContent += `- [#${issue.number}] ${issue.title}\n`;
+              }
+            }
+            
+            // In Progress
+            reportContent += `\n## In Progress\n\n`;
+            const inProgressIssues = openIssues.data.filter(issue => issue.assignee && !issue.pull_request);
+            for (const issue of inProgressIssues) {
+              reportContent += `- [#${issue.number}] ${issue.title} (Assigned to @${issue.assignee.login})\n`;
+            }
+            
+            // Save report
+            const reportDir = 'reports';
+            const reportFileName = `${reportDir}/week-${weekNumber}-report.md`;
+            
+            try {
+              await github.rest.repos.createOrUpdateFileContents({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: reportFileName,
+                message: `Generate weekly status report for week ${weekNumber}`,
+                content: Buffer.from(reportContent).toString('base64'),
+                committer: {
+                  name: 'GitHub Actions',
+                  email: 'actions@github.com'
+                },
+                author: {
+                  name: 'GitHub Actions',
+                  email: 'actions@github.com'
+                }
+              });
+              
+              console.log(`Successfully created report: ${reportFileName}`);
+            } catch (error) {
+              console.error(`Error creating report: ${error.message}`);
+            }
