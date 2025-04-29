@@ -1,0 +1,71 @@
+name: Milestone Alert
+
+on:
+  schedule:
+    - cron: '0 9 * * WED'  # 9 AM every Wednesday
+  workflow_dispatch:
+
+jobs:
+  check-milestones:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const milestones = await github.rest.issues.listMilestones({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            
+            const today = new Date();
+            const alerts = [];
+            
+            for (const milestone of milestones.data) {
+              if (milestone.due_on) {
+                const dueDate = new Date(milestone.due_on);
+                const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+                
+                if (daysUntilDue <= 14 && daysUntilDue > 0) {
+                  // Get milestone completion percentage
+                  const total = milestone.open_issues + milestone.closed_issues;
+                  const percentComplete = total > 0 
+                    ? (milestone.closed_issues / total * 100).toFixed(1) 
+                    : 0;
+                  
+                  alerts.push({
+                    title: milestone.title,
+                    daysLeft: daysUntilDue,
+                    percentComplete: percentComplete,
+                    openIssues: milestone.open_issues,
+                    url: milestone.html_url
+                  });
+                }
+              }
+            }
+            
+            if (alerts.length > 0) {
+              // Create an issue with the alerts
+              const issueBody = `# 🚨 Milestone Alert 🚨\n\n` +
+                `The following milestones are approaching their due dates:\n\n` +
+                alerts.map(alert => 
+                  `## ${alert.title}\n` +
+                  `- **Days Remaining**: ${alert.daysLeft}\n` +
+                  `- **Completion**: ${alert.percentComplete}%\n` +
+                  `- **Open Issues**: ${alert.openIssues}\n` +
+                  `- **Milestone URL**: ${alert.url}\n`
+                ).join('\n');
+              
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `Milestone Alert: ${alerts.map(a => a.title).join(', ')}`,
+                body: issueBody,
+                labels: ['type:alert', 'priority:high']
+              });
+              
+              console.log('Created milestone alert issue');
+            } else {
+              console.log('No upcoming milestones need alerts');
+            }
