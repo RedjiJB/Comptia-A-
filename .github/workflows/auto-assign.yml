@@ -1,0 +1,157 @@
+name: Auto Assign to Project and Status
+
+on:
+  issues:
+    types: [opened, assigned]
+  pull_request:
+    types: [opened, assigned]
+
+jobs:
+  assign_to_project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign to Project
+        uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/users/RedjiJB/projects/1
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  update_status:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'assigned'
+    steps:
+      - name: Move to In Progress
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get project data
+            const projectUrl = 'https://github.com/users/RedjiJB/projects/1';
+            const projectNumber = projectUrl.split('/').pop();
+            
+            // Query for the project ID
+            const projectQuery = `
+              query($owner: String!, $number: Int!) {
+                user(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 20) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            
+            const projectData = await github.graphql(projectQuery, {
+              owner: context.repo.owner,
+              number: parseInt(projectNumber)
+            });
+            
+            // Find the Status field
+            const project = projectData.user.projectV2;
+            const statusField = project.fields.nodes.find(field => field.name === 'Status');
+            
+            if (!statusField) {
+              console.log('Status field not found in project');
+              return;
+            }
+            
+            // Find the "In Progress" option
+            const inProgressOption = statusField.options.find(option => option.name === 'In Progress');
+            
+            if (!inProgressOption) {
+              console.log('In Progress option not found in Status field');
+              return;
+            }
+            
+            // Query for the issue node ID
+            const issueQuery = `
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) {
+                    id
+                  }
+                }
+              }
+            `;
+            
+            const issueData = await github.graphql(issueQuery, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              number: context.issue.number
+            });
+            
+            const issueId = issueData.repository.issue.id;
+            
+            // Update the issue status in the project
+            const updateMutation = `
+              mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId,
+                  itemId: $itemId,
+                  fieldId: $fieldId,
+                  value: { 
+                    singleSelectOptionId: $optionId
+                  }
+                }) {
+                  projectV2Item {
+                    id
+                  }
+                }
+              }
+            `;
+            
+            // First need to get the item ID in the project
+            const itemQuery = `
+              query($projectId: ID!, $issueId: ID!) {
+                node(id: $projectId) {
+                  ... on ProjectV2 {
+                    items(first: 100) {
+                      nodes {
+                        id
+                        content {
+                          ... on Issue {
+                            id
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            
+            const itemData = await github.graphql(itemQuery, {
+              projectId: project.id,
+              issueId: issueId
+            });
+            
+            // Find the item that matches our issue
+            const item = itemData.node.items.nodes.find(
+              item => item.content && item.content.id === issueId
+            );
+            
+            if (!item) {
+              console.log('Issue not found in project');
+              return;
+            }
+            
+            // Update the status
+            await github.graphql(updateMutation, {
+              projectId: project.id,
+              itemId: item.id,
+              fieldId: statusField.id,
+              optionId: inProgressOption.id
+            });
+            
+            console.log(`Issue #${context.issue.number} moved to In Progress in the project`);
