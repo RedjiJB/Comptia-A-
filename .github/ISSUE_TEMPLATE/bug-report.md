@@ -27,3 +27,9 @@ If applicable, add screenshots.
 - Browser/Device:
 - OS:
 - Version:
+
+## Severity
+- [ ] Critical (System crash, data loss)
+- [ ] High (Feature unavailable)
+- [ ] Medium (Feature partially working)
+- [ ] Low (Minor issue, workaround available)
