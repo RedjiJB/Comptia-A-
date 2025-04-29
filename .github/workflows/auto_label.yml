@@ -1,0 +1,34 @@
+
+name: Auto Label
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  auto_label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        with:
+          script: |
+            const title = context.payload.issue.title;
+            const body = context.payload.issue.body;
+            
+            // Add logic to automatically apply labels based on title or body content
+            if (title.includes('Tech Trek')) {
+              github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['game:tech-trek']
+              })
+            } else if (title.includes('PC Builder')) {
+              github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['game:pc-builder']
+              })
+            }
+      
