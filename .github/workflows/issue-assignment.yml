@@ -1,0 +1,58 @@
+name: Issue Assignment
+
+on:
+  issues:
+    types: [assigned]
+
+jobs:
+  move-to-in-progress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Find the project by name
+            const projects = await github.rest.projects.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            
+            const project = projects.data.find(p => p.name === 'CompTIA A+ Master Development');
+            
+            if (!project) {
+              console.log('Project board not found');
+              return;
+            }
+            
+            // Get project columns
+            const columns = await github.rest.projects.listColumns({
+              project_id: project.id
+            });
+            
+            const inProgressColumn = columns.data.find(c => c.name === 'In Progress');
+            
+            if (!inProgressColumn) {
+              console.log('In Progress column not found');
+              return;
+            }
+            
+            // Get cards for the issue
+            const cards = await github.rest.projects.listCards({
+              column_id: inProgressColumn.id
+            });
+            
+            // Check if issue is already in the column
+            const issueUrl = `https://api.github.com/repos/${context.repo.owner}/${context.repo.repo}/issues/${context.payload.issue.number}`;
+            const cardExists = cards.data.some(card => card.content_url === issueUrl);
+            
+            if (!cardExists) {
+              // Move issue to In Progress column
+              await github.rest.projects.createCard({
+                column_id: inProgressColumn.id,
+                content_id: context.payload.issue.id,
+                content_type: 'Issue'
+              });
+              
+              console.log(`Moved issue #${context.payload.issue.number} to In Progress`);
+            }
